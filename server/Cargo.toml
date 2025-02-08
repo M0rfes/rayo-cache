@@ -27,3 +27,4 @@ tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 ulid = "1.2.0"
 rayo_cache_common = { path = "../common" }
+thiserror = "2.0.11"

@@ -1,5 +1,5 @@
 use clap::Parser;
-use tokio::net::TcpStream;
+use tokio::{io::AsyncWriteExt, net::TcpStream};
 use tracing::{error, info};
 
 /// A simple caching service client that connects to a server.
@@ -26,7 +26,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Connect to the server.
     match TcpStream::connect(&addr).await {
-        Ok(_stream) => info!("Successfully connected to {}", addr),
+        Ok(stream) => {
+            info!("Successfully connected to {}", addr);
+            let ping = rmp_serde::to_vec(&common::message::Command::Ping);
+            stream.write_all(ping);
+            // let bytes = stream.read
+        }
         Err(e) => error!("Failed to connect to {}: {}", addr, e),
     }
     Ok(())

@@ -8,11 +8,11 @@ name = "lib"
 path = "src/lib/mod.rs"
 
 [[bin]]
-name = "repl"
+name = "client"
 path = "src/bin/client.rs"
 
 [[bin]]
-name = "monkey_lang"
+name = "server"
 path = "src/bin/server.rs"
 
 [dependencies]

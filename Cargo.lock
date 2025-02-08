@@ -586,7 +586,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rayo-cache"
+name = "rayo_cache_clint"
 version = "0.0.0"
 dependencies = [
  "anyhow",
@@ -595,6 +595,35 @@ dependencies = [
  "clap",
  "dashmap",
  "futures",
+ "rayo_cache_common",
+ "rmp-serde",
+ "serde",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "ulid",
+]
+
+[[package]]
+name = "rayo_cache_common"
+version = "0.0.0"
+dependencies = [
+ "rmp-serde",
+ "serde",
+]
+
+[[package]]
+name = "rayo_cache_server"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "chrono",
+ "clap",
+ "dashmap",
+ "futures",
+ "rayo_cache_common",
  "rmp-serde",
  "serde",
  "tokio",

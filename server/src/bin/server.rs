@@ -1,6 +1,9 @@
+
 use clap::Parser;
 use tokio::net::TcpListener;
 use tracing::{error, info};
+// import handle_connection from lib
+
 
 /// A simple caching service server that listens on a port.
 #[derive(Parser, Debug)]
@@ -29,11 +32,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match listener.accept().await {
             Ok((socket, peer_addr)) => {
                 info!("Accepted connection from {}", peer_addr);
-                // For now, we simply drop the socket.
-                // In later steps you can spawn a task to handle each connection.
-                drop(socket);
+                lib::handle_connection(socket).await;
             }
             Err(e) => error!("Failed to accept connection: {}", e),
         }
     }
 }
+

@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tracing::info;
 
-pub async fn handle_connection(stream: TcpStream) {
+pub async fn handle_connection(stream: TcpStream)->Result<(),Box<dyn std::error::Error>> {
     let peer_addr = stream.peer_addr().unwrap();
     info!("Accepted connection from {}", peer_addr);
 
@@ -21,7 +21,8 @@ pub async fn handle_connection(stream: TcpStream) {
     let reader = reader::Reader::new(reader_stream, tx);
     let writer = writer::Writer::new(writer_sink, rx);
     let writer_handle = tokio::spawn(async move { writer.write().await.unwrap() });
-    reader.run().await.unwrap();
-    let _ = writer_handle.await;
+    reader.run().await?;
+    writer_handle.await?;
     info!("Connection with {} closed", peer_addr);
+    Ok(())
 }

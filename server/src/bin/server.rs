@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match listener.accept().await {
             Ok((socket, peer_addr)) => {
                 info!("Accepted connection from {}", peer_addr);
-                lib::handle_connection(socket).await;
+                lib::handle_connection(socket).await?;
             }
             Err(e) => error!("Failed to accept connection: {}", e),
         }

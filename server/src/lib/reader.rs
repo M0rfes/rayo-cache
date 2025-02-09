@@ -1,5 +1,5 @@
 use bytes::BytesMut;
-use common::message::Command;
+use common::message::{Command, Response};
 use futures::{stream::SplitStream, Stream, StreamExt};
 use rmp_serde::from_slice;
 use thiserror::Error;
@@ -18,21 +18,26 @@ pub enum ReaderError {
     #[error("Read Error")]
     ReadError,
 
-    #[error("Send Error")]
-    SendError(SendError<Command>),
+    #[error("Send Error: {0}")]
+    SendError(SendError<Response>),
+
+    #[error("send to data task error {0}")]
+    SendToDataTaskError(SendError<Command>),
 }
 
 pub struct Reader {
     stream: SplitStream<Framed<TcpStream, LengthDelimitedCodec>>,
-    tx: Sender<common::message::Command>,
+    tx: Sender<common::message::Response>,
+    command_tx: Sender<Command>
 }
 
 impl Reader {
     pub fn new(
         stream: SplitStream<Framed<TcpStream, LengthDelimitedCodec>>,
-        tx: Sender<common::message::Command>,
+        tx: Sender<common::message::Response>,
+        command_tx: Sender<Command>
     ) -> Self {
-        Self { stream, tx }
+        Self { stream, tx, command_tx }
     }
 
     pub async fn run(mut self) -> Result<(), ReaderError> {
@@ -53,11 +58,17 @@ impl Reader {
     async fn process_message(&self, msg: BytesMut) -> Result<(), ReaderError> {
         match from_slice::<common::message::Command>(&msg) {
             Ok(common::message::Command::Ping) => {
-                if let Err(e) = self.tx.send(common::message::Command::Ping).await {
+                if let Err(e) = self.tx.send(common::message::Response::Pong).await {
                     error!("Error forwarding Pong to writer: {}", e);
                     return Err(ReaderError::SendError(e));
                 }
             }
+          Ok(set @ common::message::Command::Set(_,_)) => {
+              if let Err(e) =   self.command_tx.send(set).await {
+                error!("Error forwarding Set to writer: {}", e);
+                return Err(ReaderError::SendToDataTaskError(e));
+              }
+            },
             Err(e) => {
                 eprintln!("Failed to parse message: {}", e);
                 return Err(ReaderError::ParseError);

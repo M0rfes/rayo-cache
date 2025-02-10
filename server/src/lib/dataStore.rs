@@ -2,8 +2,6 @@ use std::{collections, hash::DefaultHasher};
 
 use common::message::{Command, Response};
 use dashmap::DashMap;
-use futures::future::ok;
-use rmp_serde::config;
 use serde_json::{json, Value};
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
@@ -45,21 +43,14 @@ impl DataStore {
                     }
                 }
                 Command::POST { uri, body } => {
-                    println!("processing post");
                     let (name, _) = uri.split_once('/').unwrap_or((uri.as_str(), ""));
-                    // let Some(obj) = body.as_object_mut() else {
-                    //     return Err(DSError::ParseError);
-                    // };
                     let id = Ulid::new();
-                    // obj.insert("_id".to_string(), json!(id.to_string()));
-                    // let obj = json!(obj);
                     if let Some(ds) = self.kv.get_mut(name) {
                         ds.insert(id, body);
                     } else {
                         let collection = DashMap::from_iter(vec![(id.clone(), body)]);
                         self.kv.insert(name.to_string(), collection);
                     }
-                    println!("processed post");
 
                     if let Err(e) = self.tx.send(Response::ID(id.to_string())).await {
                         error!("Error forwarding Pong to writer: {}", e);
@@ -71,7 +62,7 @@ impl DataStore {
                     if id.is_empty() {
                         let collection = self.kv.get(name);
                         if collection.is_none() {
-                            if let Err(e) = self.tx.send(Response::NIL).await {
+                            if let Err(e) = self.tx.send(Response::NULL).await {
                                 error!("Error forwarding Pong to writer: {}", e);
                                 return Err(DSError::SendError(e));
                             }
@@ -81,7 +72,12 @@ impl DataStore {
                                 collection
                                     .value()
                                     .iter()
-                                    .map(|r| r.value().clone())
+                                    .map(|r| {
+                                        json!({
+                                            "_id": r.key().to_string(),
+                                            "value": r.value().clone()
+                                        })
+                                    })
                                     .collect::<Vec<_>>(),
                             );
                             if let Err(e) = self.tx.send(res).await {
@@ -91,28 +87,35 @@ impl DataStore {
                         }
                     } else {
                         let Some(collection) = self.kv.get(name) else {
-                            if let Err(e) = self.tx.send(Response::NIL).await {
+                            if let Err(e) = self.tx.send(Response::NULL).await {
                                 error!("Error forwarding Pong to writer: {}", e);
                                 return Err(DSError::SendError(e));
                             }
                             continue;
                         };
                         let Ok(ulid) = Ulid::from_string(id) else {
-                            if let Err(e) = self.tx.send(Response::NIL).await {
+                            if let Err(e) = self.tx.send(Response::NULL).await {
                                 error!("Error forwarding Pong to writer: {}", e);
                                 return Err(DSError::SendError(e));
                             }
                             continue;
                         };
                         let Some(obj) = collection.get(&ulid) else {
-                            if let Err(e) = self.tx.send(Response::NIL).await {
+                            if let Err(e) = self.tx.send(Response::NULL).await {
                                 error!("Error forwarding Pong to writer: {}", e);
                                 return Err(DSError::SendError(e));
                             }
                             continue;
                         };
-                        let o = obj.value();
-                        if let Err(e) = self.tx.send(Response::OBJECT(o.clone())).await {
+
+                        if let Err(e) = self
+                            .tx
+                            .send(Response::OBJECT(json!({
+                                "_id": obj.key().to_string(),
+                                "value": obj.clone()
+                            })))
+                            .await
+                        {
                             error!("Error forwarding Pong to writer: {}", e);
                             return Err(DSError::SendError(e));
                         }

@@ -44,7 +44,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match Command::from_str(&command_text) {
             Ok(command) => {
-                println!("got command");
                 let bytes = to_vec(&command)?;
                 framed.send(bytes.into()).await?;
                 if let Some(frame) = framed.next().await {
@@ -52,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         Ok(resp_bytes) => {
                             // Deserialize the response.
                             let response: Response = from_slice(&resp_bytes)?;
-                            println!("Server responded: {:?}", response);
+                            println!("Server responded: {}", response);
                         }
                         Err(e) => {
                             eprintln!("Error reading response: {}", e);

@@ -1,3 +1,4 @@
+use core::fmt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::str::FromStr;
@@ -122,6 +123,61 @@ pub enum Response {
     #[serde(alias = "collection")]
     COLLECTION(Vec<Value>),
 
-    #[serde(alias = "nil")]
-    NIL,
+    #[serde(alias = "null")]
+    NULL,
+}
+
+impl fmt::Display for Response {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Response::NULL => write!(f,"{}","null"),
+            Response::PONG => write!(f,"{}","pong"),
+            Response::OBJECT(value) => write!(f,"{}",print_value(value)),
+            Response::COLLECTION(values) => {
+                let mut res = "[".to_string();
+                for (i, v) in values.iter().enumerate() {
+                    res.push_str(&print_value(v));
+                    if i < values.len() - 1 {
+                        res.push_str(", ");
+                    }
+                }
+                res.push_str("]");
+                write!(f, "{}", res)
+            }
+            _ => {
+                write!(f, "{}", serde_json::to_string(self).unwrap())
+            }
+        }
+    }
+}
+
+fn print_value(v: &Value) -> String {
+    match v {
+        Value::Null => "null".to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Number(n) => n.to_string(),
+        Value::String(s) => s.clone(),
+        Value::Array(a) => {
+            let mut res = "[".to_string();
+            for (i, v) in a.iter().enumerate() {
+                res.push_str(&print_value(v));
+                if i < a.len() - 1 {
+                    res.push_str(", ");
+                }
+            }
+            res.push_str("]");
+            res
+        }
+        Value::Object(o) => {
+            let mut res = "{".to_string();
+            for (i, (k, v)) in o.iter().enumerate() {
+                res.push_str(&format!("{}: {}", k, print_value(v)));
+                if i < o.len() - 1 {
+                    res.push_str(", ");
+                }
+            }
+            res.push_str("}");
+            res
+        }
+    }
 }

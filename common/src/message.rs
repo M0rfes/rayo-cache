@@ -22,7 +22,6 @@ pub enum Command {
 
     #[serde(alias = "patch")]
     PATCH { uri: String, body: Value },
-    
 }
 
 #[derive(Debug, Error)]
@@ -36,14 +35,14 @@ pub enum CommandParseError {
     #[error("Invalid command: {0}")]
     BodyParseFailed(serde_json::Error),
     #[error("Invalid format")]
-    InvalidFormat
+    InvalidFormat,
 }
 
 impl Command {
     pub fn try_new(string: &str) -> Result<Self, CommandParseError> {
         let (head, tail) = string.split_once('\n').unwrap_or((string, ""));
-        let (verb, uri) = head.split_once(' ').unwrap_or((head, ""));
-        match verb.to_lowercase().as_str() {
+        let (verb, uri) = head.trim().split_once(' ').unwrap_or((head, ""));
+        match verb.trim().to_lowercase().as_str() {
             "ping" => Ok(Self::PING),
             "get" => {
                 if uri == "" {
@@ -92,7 +91,7 @@ impl Command {
     }
 
     fn parse_body(string: &str) -> Result<Value, CommandParseError> {
-        let (body, value) = string.split_once(' ').unwrap_or((string, ""));
+        let (body, value) = string.trim().split_once(' ').unwrap_or((string, ""));
         if body.to_lowercase().as_str() != "body" {
             Err(CommandParseError::MissingBody)
         } else {
@@ -121,5 +120,8 @@ pub enum Response {
     OBJECT(Value),
 
     #[serde(alias = "collection")]
-    COLLECTION(Vec<Value>)
+    COLLECTION(Vec<Value>),
+
+    #[serde(alias = "nil")]
+    NIL,
 }

@@ -26,26 +26,13 @@ impl Writer {
     }
 
     pub async fn write(mut self) -> Result<(), WriterError> {
-        while let Some(msg_bytes) = self.rx.recv().await {
-            match msg_bytes {
-               rep @ Response::PONG => {
-                    let msg = rmp_serde::to_vec(&rep).unwrap();
-                    let bytes = Bytes::from(msg);
-                    if let Err(e) = self.sink.send(bytes).await {
-                        error!("Failed to send message: {}", e);
-                        return Err(WriterError::SendError);
-                    }
-                }
-                _ => todo!()
-                // Response::Ok => {
-                //     let msg = rmp_serde::to_vec(&Response::Ok).unwrap();
-                //     let bytes = Bytes::from(msg);
-                //     if let Err(e) = self.sink.send(bytes).await {
-                //         error!("Failed to send message: {}", e);
-                //         return Err(WriterError::SendError);
-                //     }
-                // }
-            };
+        while let Some(msg) = self.rx.recv().await {
+            let msg = rmp_serde::to_vec(&msg).unwrap();
+            let bytes = Bytes::from(msg);
+            if let Err(e) = self.sink.send(bytes).await {
+                error!("Failed to send message: {}", e);
+                return Err(WriterError::SendError);
+            }
         }
         Ok(())
     }

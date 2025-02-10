@@ -1,7 +1,6 @@
 mod reader;
 mod writer;
 mod dataStore;
-mod DataStore;
 
 use futures::StreamExt;
 use tokio::net::TcpStream;
@@ -21,11 +20,15 @@ pub async fn handle_connection(stream: TcpStream)->Result<(),Box<dyn std::error:
     // Create an mpsc channel to pass serialized responses from the reader to the writer.
     let (tx, rx) = mpsc::channel::<common::message::Response>(32);
     let (command_tx, command_rx) = mpsc::channel::<common::message::Command>(32);
-    let reader = reader::Reader::new(reader_stream, tx,command_tx);
+    let reader = reader::Reader::new(reader_stream,command_tx);
     let writer = writer::Writer::new(writer_sink, rx);
+    let data_store = dataStore::DataStore::new(tx, command_rx);
+
     let writer_handle = tokio::spawn(async move { writer.write().await.unwrap() });
+    let data_handler = tokio::spawn(async move {data_store.run().await.unwrap()});
     reader.run().await?;
     writer_handle.await?;
+    data_handler.await?;
     info!("Connection with {} closed", peer_addr);
     Ok(())
 }

@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let command_text = line.trim().to_lowercase();
         if command_text == "ping" {
             // Create the Command::Ping message.
-            let ping_cmd = Command::Ping;
+            let ping_cmd = Command::PING;
             // Serialize the command into MessagePack bytes.
             let bytes = to_vec(&ping_cmd)?;
             // Send the serialized command over the connection.

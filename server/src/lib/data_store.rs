@@ -122,6 +122,75 @@ impl DataStore {
                     };
                     self.send_response(Response::OK).await;
                 }
+                Command::DELETE { ref uri } => {
+                    let Some((name, id)) = uri.split_once("/") else {
+                        self.send_response(Response::ERROR("invalid path".to_string()))
+                            .await;
+                        continue;
+                    };
+                    let Some(collection) = self.kv.get_mut(name) else {
+                        self.send_response(Response::ERROR("collection not found".to_string()))
+                            .await;
+                        continue;
+                    };
+                    let Ok(id) = Ulid::from_string(id) else {
+                        self.send_response(Response::ERROR("invalid id".to_string()))
+                            .await;
+                        continue;
+                    };
+                    let Some(_) = collection.remove(&id) else {
+                        self.send_response(Response::ERROR("object not found".to_string()))
+                            .await;
+                        continue;
+                    };
+                    self.send_response(Response::OK).await;
+                }
+                Command::PATCH { ref uri, ref body } => {
+                    let Some((name, id)) = uri.split_once("/") else {
+                        self.send_response(Response::ERROR("invalid path".to_string()))
+                            .await;
+                        continue;
+                    };
+                    let Some(collection) = self.kv.get_mut(name) else {
+                        self.send_response(Response::ERROR("collection not found".to_string()))
+                            .await;
+                        continue;
+                    };
+                    let Ok(id) = Ulid::from_string(id) else {
+                        self.send_response(Response::ERROR("invalid id".to_string()))
+                            .await;
+                        continue;
+                    };
+                    let Some(mut object) = collection.get_mut(&id) else {
+                        self.send_response(Response::ERROR("object not found".to_string()))
+                            .await;
+                        continue;
+                    };
+                    let v = object.take();
+                    drop(object);
+                    match (v, body) {
+                        (Value::Null, Value::Null)
+                        | (Value::Bool(_), Value::Bool(_))
+                        | (Value::Number(_), Value::Number(_))
+                        | (Value::String(_), Value::String(_)) => {
+                            collection.insert(id, body.clone());
+                        }
+                        (Value::Array(mut a), Value::Array(b)) => {
+                            a.extend(b.clone());
+                            collection.insert(id, Value::Array(a));
+                        }
+                        (Value::Object(mut a), Value::Object(b)) => {
+                            a.extend(b.clone());
+                            collection.insert(id, Value::Object(a));
+                        }
+                        _ => {
+                            self.send_response(Response::ERROR("type mismatch".to_string()))
+                                .await;
+                            continue;
+                        }
+                    };
+                    self.send_response(Response::OK).await;
+                }
                 Command::DUMP { file } => {}
                 _ => todo!(),
             }

@@ -62,7 +62,7 @@ impl DataStore {
                     if id.is_empty() {
                         let collection = self.kv.get(name);
                         if collection.is_none() {
-                            if let Err(e) = self.tx.send(Response::NULL).await {
+                            if let Err(e) = self.tx.send(Response::ERROR("collection not found".to_string())).await {
                                 error!("Error forwarding Pong to writer: {}", e);
                                 return Err(DSError::SendError(e));
                             }
@@ -74,7 +74,7 @@ impl DataStore {
                                     .iter()
                                     .map(|r| {
                                         json!({
-                                            "_id": r.key().to_string(),
+                                            "ID": r.key().to_string(),
                                             "value": r.value().clone()
                                         })
                                     })
@@ -87,21 +87,21 @@ impl DataStore {
                         }
                     } else {
                         let Some(collection) = self.kv.get(name) else {
-                            if let Err(e) = self.tx.send(Response::NULL).await {
+                            if let Err(e) = self.tx.send(Response::ERROR("collection not found".to_string())).await {
                                 error!("Error forwarding Pong to writer: {}", e);
                                 return Err(DSError::SendError(e));
                             }
                             continue;
                         };
                         let Ok(ulid) = Ulid::from_string(id) else {
-                            if let Err(e) = self.tx.send(Response::NULL).await {
+                            if let Err(e) = self.tx.send(Response::ERROR("invalid ID".to_string())).await {
                                 error!("Error forwarding Pong to writer: {}", e);
                                 return Err(DSError::SendError(e));
                             }
                             continue;
                         };
                         let Some(obj) = collection.get(&ulid) else {
-                            if let Err(e) = self.tx.send(Response::NULL).await {
+                            if let Err(e) = self.tx.send(Response::ERROR("object not found".to_string())).await {
                                 error!("Error forwarding Pong to writer: {}", e);
                                 return Err(DSError::SendError(e));
                             }
@@ -111,7 +111,7 @@ impl DataStore {
                         if let Err(e) = self
                             .tx
                             .send(Response::OBJECT(json!({
-                                "_id": obj.key().to_string(),
+                                "ID": obj.key().to_string(),
                                 "value": obj.clone()
                             })))
                             .await
@@ -120,6 +120,9 @@ impl DataStore {
                             return Err(DSError::SendError(e));
                         }
                     }
+                }
+                Command::DUMP {file} => {
+                    
                 }
                 _ => todo!(),
             }

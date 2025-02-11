@@ -1,6 +1,6 @@
 mod reader;
 mod writer;
-mod dataStore;
+mod data_store;
 
 use futures::StreamExt;
 use tokio::net::TcpStream;
@@ -22,9 +22,9 @@ pub async fn handle_connection(stream: TcpStream)->Result<(),Box<dyn std::error:
     let (command_tx, command_rx) = mpsc::channel::<common::message::Command>(32);
     let reader = reader::Reader::new(reader_stream,command_tx);
     let writer = writer::Writer::new(writer_sink, rx);
-    let data_store = dataStore::DataStore::new(tx, command_rx);
+    let data_store = data_store::DataStore::new(tx, command_rx);
 
-    let writer_handle = tokio::spawn(async move { writer.write().await.unwrap() });
+    let writer_handle = tokio::spawn(async move { writer.run().await.unwrap() });
     let data_handler = tokio::spawn(async move {data_store.run().await.unwrap()});
     reader.run().await?;
     writer_handle.await?;

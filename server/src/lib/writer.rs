@@ -25,7 +25,7 @@ impl Writer {
         Self { sink, rx }
     }
 
-    pub async fn write(mut self) -> Result<(), WriterError> {
+    pub async fn run(mut self) -> Result<(), WriterError> {
         while let Some(msg) = self.rx.recv().await {
             let msg = rmp_serde::to_vec(&msg).unwrap();
             let bytes = Bytes::from(msg);

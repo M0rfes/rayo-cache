@@ -9,6 +9,9 @@ pub enum Command {
     #[serde(alias = "ping")]
     PING,
 
+    #[serde(alias = "dump")]
+    DUMP { file: String },
+
     #[serde(alias = "get")]
     GET { uri: String },
 
@@ -51,6 +54,15 @@ impl Command {
                 } else {
                     Ok(Self::GET {
                         uri: uri.to_string(),
+                    })
+                }
+            }
+            "dump" => {
+                if uri == "" {
+                    Err(CommandParseError::MissingUri)
+                } else {
+                    Ok(Self::DUMP {
+                        file: uri.to_string(),
                     })
                 }
             }
@@ -125,14 +137,17 @@ pub enum Response {
 
     #[serde(alias = "null")]
     NULL,
+
+    #[serde(alias = "error")]
+    ERROR(String),
 }
 
 impl fmt::Display for Response {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Response::NULL => write!(f,"{}","null"),
-            Response::PONG => write!(f,"{}","pong"),
-            Response::OBJECT(value) => write!(f,"{}",print_value(value)),
+            Response::NULL => write!(f, "{}", "null"),
+            Response::PONG => write!(f, "{}", "pong"),
+            Response::OBJECT(value) => write!(f, "{}", print_value(value)),
             Response::COLLECTION(values) => {
                 let mut res = "[".to_string();
                 for (i, v) in values.iter().enumerate() {
@@ -156,7 +171,7 @@ fn print_value(v: &Value) -> String {
         Value::Null => "null".to_string(),
         Value::Bool(b) => b.to_string(),
         Value::Number(n) => n.to_string(),
-        Value::String(s) => s.clone(),
+        Value::String(s) => format!("\"{}\"", s.clone()),
         Value::Array(a) => {
             let mut res = "[".to_string();
             for (i, v) in a.iter().enumerate() {
@@ -171,7 +186,7 @@ fn print_value(v: &Value) -> String {
         Value::Object(o) => {
             let mut res = "{".to_string();
             for (i, (k, v)) in o.iter().enumerate() {
-                res.push_str(&format!("{}: {}", k, print_value(v)));
+                res.push_str(&format!("\"{}\": {}", k, print_value(v)));
                 if i < o.len() - 1 {
                     res.push_str(", ");
                 }

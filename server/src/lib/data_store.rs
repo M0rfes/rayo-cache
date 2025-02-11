@@ -36,10 +36,10 @@ impl DataStore {
     pub async fn run(mut self) -> Result<(), DSError> {
         while let Some(msg) = self.rx.recv().await {
             match msg {
-                Command::PING => {
+                Command::PING { headers } => {
                     self.send_response(Response::PONG).await;
                 }
-                Command::POST { uri, body } => {
+                Command::POST { uri, body, headers } => {
                     let (name, _) = uri.split_once('/').unwrap_or((uri.as_str(), ""));
                     let id = Ulid::new();
                     if let Some(ds) = self.kv.get_mut(name) {
@@ -51,7 +51,7 @@ impl DataStore {
 
                     self.send_response(Response::ID(id.to_string())).await;
                 }
-                Command::GET { uri } => {
+                Command::GET { uri, headers } => {
                     let (name, id) = uri.split_once('/').unwrap_or((uri.as_str(), ""));
                     if id.is_empty() {
                         let collection = self.kv.get(name);
@@ -98,7 +98,11 @@ impl DataStore {
                         .await;
                     }
                 }
-                Command::PUT { ref uri, ref body } => {
+                Command::PUT {
+                    ref uri,
+                    ref body,
+                    headers,
+                } => {
                     let Some((name, id)) = uri.split_once("/") else {
                         self.send_response(Response::ERROR("invalid path".to_string()))
                             .await;
@@ -122,7 +126,7 @@ impl DataStore {
                     };
                     self.send_response(Response::OK).await;
                 }
-                Command::DELETE { ref uri } => {
+                Command::DELETE { ref uri, headers } => {
                     let Some((name, id)) = uri.split_once("/") else {
                         self.send_response(Response::ERROR("invalid path".to_string()))
                             .await;
@@ -145,7 +149,11 @@ impl DataStore {
                     };
                     self.send_response(Response::OK).await;
                 }
-                Command::PATCH { ref uri, ref body } => {
+                Command::PATCH {
+                    ref uri,
+                    ref body,
+                    headers,
+                } => {
                     let Some((name, id)) = uri.split_once("/") else {
                         self.send_response(Response::ERROR("invalid path".to_string()))
                             .await;

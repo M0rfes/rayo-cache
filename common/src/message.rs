@@ -2,7 +2,7 @@ use bytes::BytesMut;
 use core::fmt;
 use rmp_serde::{from_slice, to_vec};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::io::Read;
 use std::io::Write;
 use std::str::FromStr;
@@ -10,28 +10,41 @@ use thiserror::Error;
 use zstd::stream::Decoder;
 use zstd::stream::Encoder;
 
+type Header = Option<Map<String, Value>>;
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Command {
     #[serde(alias = "ping")]
-    PING,
+    PING { headers: Header },
 
     #[serde(alias = "dump")]
     DUMP { file: String },
 
     #[serde(alias = "get")]
-    GET { uri: String },
+    GET { uri: String, headers: Header },
 
     #[serde(alias = "delete")]
-    DELETE { uri: String },
+    DELETE { uri: String, headers: Header },
 
     #[serde(alias = "post")]
-    POST { uri: String, body: Value },
+    POST {
+        uri: String,
+        body: Value,
+        headers: Header,
+    },
 
     #[serde(alias = "put")]
-    PUT { uri: String, body: Value },
+    PUT {
+        uri: String,
+        body: Value,
+        headers: Header,
+    },
 
     #[serde(alias = "patch")]
-    PATCH { uri: String, body: Value },
+    PATCH {
+        uri: String,
+        body: Value,
+        headers: Header,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -44,8 +57,12 @@ pub enum CommandParseError {
     MissingUri,
     #[error("Invalid command: {0}")]
     BodyParseFailed(serde_json::Error),
-    #[error("Invalid format")]
-    InvalidFormat,
+    #[error("Invalid format {0}")]
+    InvalidFormat(serde_json::Error),
+    #[error("Header is empty")]
+    EmptyHeader,
+    #[error("No header")]
+    NoHeader,
 }
 #[derive(Debug, Error)]
 #[error("failed to deserialize {0}")]
@@ -60,14 +77,28 @@ impl Command {
         let (head, tail) = string.split_once('\n').unwrap_or((string, ""));
         let (verb, uri) = head.trim().split_once(' ').unwrap_or((head, ""));
         match verb.trim().to_lowercase().as_str() {
-            "ping" => Ok(Self::PING),
+            "ping" => match Self::parse_header(tail) {
+                Ok(headers) => Ok(Command::PING {
+                    headers: Some(headers),
+                }),
+                Err(CommandParseError::NoHeader) => Ok(Command::PING { headers: None }),
+                Err(err) => return Err(err),
+            },
             "get" => {
                 if uri == "" {
                     Err(CommandParseError::MissingUri)
                 } else {
-                    Ok(Self::GET {
-                        uri: uri.to_string(),
-                    })
+                    match Self::parse_header(tail) {
+                        Ok(headers) => Ok(Command::GET {
+                            uri: uri.to_string(),
+                            headers: Some(headers),
+                        }),
+                        Err(CommandParseError::NoHeader) => Ok(Command::GET {
+                            uri: uri.to_string(),
+                            headers: None,
+                        }),
+                        Err(err) => return Err(err),
+                    }
                 }
             }
             "dump" => {
@@ -83,34 +114,70 @@ impl Command {
                 if uri == "" {
                     Err(CommandParseError::MissingUri)
                 } else {
-                    Ok(Self::DELETE {
-                        uri: uri.to_string(),
-                    })
+                    match Self::parse_header(tail) {
+                        Ok(headers) => Ok(Command::DELETE {
+                            uri: uri.to_string(),
+                            headers: Some(headers),
+                        }),
+                        Err(CommandParseError::NoHeader) => Ok(Command::DELETE {
+                            uri: uri.to_string(),
+                            headers: None,
+                        }),
+                        Err(err) => return Err(err),
+                    }
                 }
             }
             "post" => {
-                let (head, _tail) = tail.split_once('\n').unwrap_or((tail, ""));
+                let (head, tail) = tail.split_once('\n').unwrap_or((tail, ""));
                 let body = Self::parse_body(head)?;
-                Ok(Self::POST {
-                    uri: uri.to_string(),
-                    body,
-                })
+                match Self::parse_header(tail) {
+                    Ok(headers) => Ok(Command::POST {
+                        uri: uri.to_string(),
+                        body,
+                        headers: Some(headers),
+                    }),
+                    Err(CommandParseError::NoHeader) => Ok(Command::POST {
+                        uri: uri.to_string(),
+                        body,
+                        headers: None,
+                    }),
+                    Err(err) => return Err(err),
+                }
             }
             "put" => {
-                let (head, _tail) = tail.split_once('\n').unwrap_or((tail, ""));
+                let (head, tail) = tail.split_once('\n').unwrap_or((tail, ""));
                 let body = Self::parse_body(head)?;
-                Ok(Self::PUT {
-                    uri: uri.to_string(),
-                    body,
-                })
+                match Self::parse_header(tail) {
+                    Ok(headers) => Ok(Command::PUT {
+                        uri: uri.to_string(),
+                        body,
+                        headers: Some(headers),
+                    }),
+                    Err(CommandParseError::NoHeader) => Ok(Command::PUT {
+                        uri: uri.to_string(),
+                        body,
+                        headers: None,
+                    }),
+                    Err(err) => return Err(err),
+                }
             }
+
             "patch" => {
-                let (head, _tail) = tail.split_once('\n').unwrap_or((tail, ""));
+                let (head, tail) = tail.split_once('\n').unwrap_or((tail, ""));
                 let body = Self::parse_body(head)?;
-                Ok(Self::PATCH {
-                    uri: uri.to_string(),
-                    body,
-                })
+                match Self::parse_header(tail) {
+                    Ok(headers) => Ok(Command::PATCH {
+                        uri: uri.to_string(),
+                        body,
+                        headers: Some(headers),
+                    }),
+                    Err(CommandParseError::NoHeader) => Ok(Command::PATCH {
+                        uri: uri.to_string(),
+                        body,
+                        headers: None,
+                    }),
+                    Err(err) => return Err(err),
+                }
             }
             _ => Err(CommandParseError::NoCommandFound),
         }
@@ -122,6 +189,18 @@ impl Command {
             Err(CommandParseError::MissingBody)
         } else {
             serde_json::from_str(value).map_err(CommandParseError::BodyParseFailed)
+        }
+    }
+
+    fn parse_header(string: &str) -> Result<Map<String, Value>, CommandParseError> {
+        let (header, value) = string.trim().split_once(' ').unwrap_or((string, ""));
+        if header.to_lowercase().as_str() != "header" {
+            Err(CommandParseError::NoHeader)
+        } else if value.is_empty() {
+            Err(CommandParseError::EmptyHeader)
+        } else {
+            serde_json::from_str::<Map<String, Value>>(value)
+                .map_err(CommandParseError::InvalidFormat)
         }
     }
 
@@ -173,7 +252,7 @@ pub enum Response {
     ERROR(String),
 
     #[serde(alias = "ok")]
-    OK
+    OK,
 }
 
 impl Response {
@@ -201,7 +280,7 @@ impl fmt::Display for Response {
         match self {
             Response::NULL => write!(f, "{}", "null"),
             Response::PONG => write!(f, "{}", "pong"),
-            Response::OK => write!(f,"{}","ok"),
+            Response::OK => write!(f, "{}", "ok"),
             Response::OBJECT(value) => write!(f, "{}", print_value(value)),
             Response::COLLECTION(values) => {
                 let mut res = "[".to_string();

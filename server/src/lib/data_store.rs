@@ -1,7 +1,7 @@
-use std::{collections, hash::DefaultHasher};
+use std::{collections, f32::consts::E, hash::DefaultHasher};
 
 use common::message::{Command, Response};
-use dashmap::DashMap;
+use dashmap::{DashMap, Entry};
 use serde_json::{json, Value};
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
@@ -37,10 +37,7 @@ impl DataStore {
         while let Some(msg) = self.rx.recv().await {
             match msg {
                 Command::PING => {
-                    if let Err(e) = self.tx.send(Response::PONG).await {
-                        error!("Error forwarding Pong to writer: {}", e);
-                        return Err(DSError::SendError(e));
-                    }
+                    self.send_response(Response::PONG).await;
                 }
                 Command::POST { uri, body } => {
                     let (name, _) = uri.split_once('/').unwrap_or((uri.as_str(), ""));
@@ -52,20 +49,15 @@ impl DataStore {
                         self.kv.insert(name.to_string(), collection);
                     }
 
-                    if let Err(e) = self.tx.send(Response::ID(id.to_string())).await {
-                        error!("Error forwarding Pong to writer: {}", e);
-                        return Err(DSError::SendError(e));
-                    }
+                    self.send_response(Response::ID(id.to_string())).await;
                 }
                 Command::GET { uri } => {
                     let (name, id) = uri.split_once('/').unwrap_or((uri.as_str(), ""));
                     if id.is_empty() {
                         let collection = self.kv.get(name);
                         if collection.is_none() {
-                            if let Err(e) = self.tx.send(Response::ERROR("collection not found".to_string())).await {
-                                error!("Error forwarding Pong to writer: {}", e);
-                                return Err(DSError::SendError(e));
-                            }
+                            self.send_response(Response::ERROR("collection not found".to_string()))
+                                .await;
                         } else {
                             let collection = collection.unwrap();
                             let res = Response::COLLECTION(
@@ -80,53 +72,66 @@ impl DataStore {
                                     })
                                     .collect::<Vec<_>>(),
                             );
-                            if let Err(e) = self.tx.send(res).await {
-                                error!("Error forwarding Pong to writer: {}", e);
-                                return Err(DSError::SendError(e));
-                            }
+                            self.send_response(res).await;
                         }
                     } else {
                         let Some(collection) = self.kv.get(name) else {
-                            if let Err(e) = self.tx.send(Response::ERROR("collection not found".to_string())).await {
-                                error!("Error forwarding Pong to writer: {}", e);
-                                return Err(DSError::SendError(e));
-                            }
+                            self.send_response(Response::ERROR("collection not found".to_string()))
+                                .await;
                             continue;
                         };
                         let Ok(ulid) = Ulid::from_string(id) else {
-                            if let Err(e) = self.tx.send(Response::ERROR("invalid ID".to_string())).await {
-                                error!("Error forwarding Pong to writer: {}", e);
-                                return Err(DSError::SendError(e));
-                            }
+                            self.send_response(Response::ERROR("invalid ID".to_string()))
+                                .await;
                             continue;
                         };
                         let Some(obj) = collection.get(&ulid) else {
-                            if let Err(e) = self.tx.send(Response::ERROR("object not found".to_string())).await {
-                                error!("Error forwarding Pong to writer: {}", e);
-                                return Err(DSError::SendError(e));
-                            }
+                            self.send_response(Response::ERROR("object not found".to_string()))
+                                .await;
                             continue;
                         };
 
-                        if let Err(e) = self
-                            .tx
-                            .send(Response::OBJECT(json!({
-                                "ID": obj.key().to_string(),
-                                "value": obj.clone()
-                            })))
-                            .await
-                        {
-                            error!("Error forwarding Pong to writer: {}", e);
-                            return Err(DSError::SendError(e));
-                        }
+                        self.send_response(Response::OBJECT(json!({
+                            "ID": obj.key().to_string(),
+                            "value": obj.clone()
+                        })))
+                        .await;
                     }
                 }
-                Command::DUMP {file} => {
-                    
+                Command::PUT { ref uri, ref body } => {
+                    let Some((name, id)) = uri.split_once("/") else {
+                        self.send_response(Response::ERROR("invalid path".to_string()))
+                            .await;
+                        continue;
+                    };
+                    let Some(collection) = self.kv.get_mut(name) else {
+                        self.send_response(Response::ERROR("collection not found".to_string()))
+                            .await;
+                        continue;
+                    };
+                    let Ok(id) = Ulid::from_string(id) else {
+                        self.send_response(Response::ERROR("invalid id".to_string()))
+                            .await;
+                        continue;
+                    };
+                    let Entry::Occupied(_) = collection.entry(id).and_modify(|v| *v = body.clone())
+                    else {
+                        self.send_response(Response::ERROR("object not found".to_string()))
+                            .await;
+                        continue;
+                    };
+                    self.send_response(Response::OK).await;
                 }
+                Command::DUMP { file } => {}
                 _ => todo!(),
             }
         }
         Ok(())
+    }
+
+    async fn send_response(&self, response: Response) {
+        if let Err(e) = self.tx.send(response).await {
+            error!("Error forwarding {}", e);
+        }
     }
 }

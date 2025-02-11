@@ -171,6 +171,9 @@ pub enum Response {
 
     #[serde(alias = "error")]
     ERROR(String),
+
+    #[serde(alias = "ok")]
+    OK
 }
 
 impl Response {
@@ -198,6 +201,7 @@ impl fmt::Display for Response {
         match self {
             Response::NULL => write!(f, "{}", "null"),
             Response::PONG => write!(f, "{}", "pong"),
+            Response::OK => write!(f,"{}","ok"),
             Response::OBJECT(value) => write!(f, "{}", print_value(value)),
             Response::COLLECTION(values) => {
                 let mut res = "[".to_string();

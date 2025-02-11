@@ -1,7 +1,6 @@
 use clap::Parser;
 use common::message::{Command, Response};
 use futures::{SinkExt, StreamExt};
-use rmp_serde::{from_slice, to_vec};
 use std::{error::Error, str::FromStr};
 use tokio::io::{self, AsyncBufReadExt, BufReader};
 use tokio::{io::AsyncWriteExt, net::TcpStream};
@@ -44,13 +43,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match Command::from_str(&command_text) {
             Ok(command) => {
-                let bytes = to_vec(&command)?;
+                let bytes = Command::to_vec(&command)?;
                 framed.send(bytes.into()).await?;
                 if let Some(frame) = framed.next().await {
                     match frame {
                         Ok(resp_bytes) => {
                             // Deserialize the response.
-                            let response: Response = from_slice(&resp_bytes)?;
+                            let response: Response = Response::from_slice(&resp_bytes)?;
                             println!("Server responded: {}", response);
                         }
                         Err(e) => {

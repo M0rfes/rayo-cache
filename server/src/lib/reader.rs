@@ -1,7 +1,6 @@
 use bytes::BytesMut;
 use common::message::{Command, Response};
 use futures::{stream::SplitStream, Stream, StreamExt};
-use rmp_serde::from_slice;
 use thiserror::Error;
 use tokio::{
     net::TcpStream,
@@ -55,7 +54,7 @@ impl Reader {
 
     async fn process_message(&self, msg: BytesMut) -> Result<(), ReaderError> {
         let command =
-            from_slice::<common::message::Command>(&msg).map_err(|_| ReaderError::ParseError)?;
+            common::message::Command::from_slice(&msg).map_err(|_| ReaderError::ParseError)?;
         if let Err(e) = self.command_tx.send(command).await {
             error!("Error forwarding command: {}", e);
             return Err(ReaderError::SendToDataTaskError(e));

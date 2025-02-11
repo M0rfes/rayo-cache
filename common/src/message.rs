@@ -1,4 +1,6 @@
+use bytes::BytesMut;
 use core::fmt;
+use rmp_serde::{from_slice, to_vec};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::str::FromStr;
@@ -41,6 +43,13 @@ pub enum CommandParseError {
     #[error("Invalid format")]
     InvalidFormat,
 }
+#[derive(Debug, Error)]
+#[error("failed to deserialize {0}")]
+pub struct DeserializeError(Box<dyn std::error::Error>);
+
+#[derive(Debug, Error)]
+#[error("failed to serialize {0}")]
+pub struct SerializeError(Box<dyn std::error::Error>);
 
 impl Command {
     pub fn try_new(string: &str) -> Result<Self, CommandParseError> {
@@ -111,6 +120,13 @@ impl Command {
             serde_json::from_str(value).map_err(CommandParseError::BodyParseFailed)
         }
     }
+
+    pub fn from_slice(input: &BytesMut) -> Result<Self, DeserializeError> {
+        from_slice(input).map_err(|e| DeserializeError(e.into()))
+    }
+    pub fn to_vec(val: &Self) -> Result<Vec<u8>, SerializeError> {
+        to_vec(val).map_err(|e| SerializeError(e.into()))
+    }
 }
 
 impl FromStr for Command {
@@ -140,6 +156,15 @@ pub enum Response {
 
     #[serde(alias = "error")]
     ERROR(String),
+}
+
+impl Response {
+    pub fn from_slice(input: &BytesMut) -> Result<Self, DeserializeError> {
+        from_slice(input).map_err(|e| DeserializeError(e.into()))
+    }
+    pub fn to_vec(val: &Self) -> Result<Vec<u8>, SerializeError> {
+        to_vec(val).map_err(|e| SerializeError(e.into()))
+    }
 }
 
 impl fmt::Display for Response {

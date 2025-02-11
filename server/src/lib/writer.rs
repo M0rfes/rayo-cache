@@ -27,7 +27,7 @@ impl Writer {
 
     pub async fn run(mut self) -> Result<(), WriterError> {
         while let Some(msg) = self.rx.recv().await {
-            let msg = rmp_serde::to_vec(&msg).unwrap();
+            let msg = Response::to_vec(&msg).unwrap();
             let bytes = Bytes::from(msg);
             if let Err(e) = self.sink.send(bytes).await {
                 error!("Failed to send message: {}", e);

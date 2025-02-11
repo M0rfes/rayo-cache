@@ -3,8 +3,12 @@ use core::fmt;
 use rmp_serde::{from_slice, to_vec};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::io::Read;
+use std::io::Write;
 use std::str::FromStr;
 use thiserror::Error;
+use zstd::stream::Decoder;
+use zstd::stream::Encoder;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Command {
@@ -122,10 +126,21 @@ impl Command {
     }
 
     pub fn from_slice(input: &BytesMut) -> Result<Self, DeserializeError> {
-        from_slice(input).map_err(|e| DeserializeError(e.into()))
+        let mut decoder = Decoder::new(&input[..]).map_err(|e| DeserializeError(e.into()))?;
+        let mut decompressed_data = Vec::new();
+        decoder
+            .read_to_end(&mut decompressed_data)
+            .map_err(|e| DeserializeError(e.into()))?;
+        from_slice(&decompressed_data).map_err(|e| DeserializeError(e.into()))
     }
+
     pub fn to_vec(val: &Self) -> Result<Vec<u8>, SerializeError> {
-        to_vec(val).map_err(|e| SerializeError(e.into()))
+        let vec = &to_vec(val).map_err(|e| SerializeError(e.into()))?;
+        let mut encoder = Encoder::new(Vec::new(), 3).map_err(|e| SerializeError(e.into()))?;
+        encoder
+            .write_all(vec)
+            .map_err(|e| SerializeError(e.into()))?;
+        encoder.finish().map_err(|e| SerializeError(e.into()))
     }
 }
 
@@ -160,10 +175,21 @@ pub enum Response {
 
 impl Response {
     pub fn from_slice(input: &BytesMut) -> Result<Self, DeserializeError> {
-        from_slice(input).map_err(|e| DeserializeError(e.into()))
+        let mut decoder = Decoder::new(&input[..]).map_err(|e| DeserializeError(e.into()))?;
+        let mut decompressed_data = Vec::new();
+        decoder
+            .read_to_end(&mut decompressed_data)
+            .map_err(|e| DeserializeError(e.into()))?;
+        from_slice(&decompressed_data).map_err(|e| DeserializeError(e.into()))
     }
+
     pub fn to_vec(val: &Self) -> Result<Vec<u8>, SerializeError> {
-        to_vec(val).map_err(|e| SerializeError(e.into()))
+        let vec = &to_vec(val).map_err(|e| SerializeError(e.into()))?;
+        let mut encoder = Encoder::new(Vec::new(), 3).map_err(|e| SerializeError(e.into()))?;
+        encoder
+            .write_all(vec)
+            .map_err(|e| SerializeError(e.into()))?;
+        encoder.finish().map_err(|e| SerializeError(e.into()))
     }
 }
 
